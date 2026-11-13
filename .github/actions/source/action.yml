@@ -1,0 +1,59 @@
+# CADCraft's source at a release tag, made into CAD Studio's by xpress/transform.py, in ./src.
+# Every build job runs this, so each builds the same changed source.
+name: CAD Studio source
+description: Check out storytold/cadcraft at a tag and apply xpress/transform.py
+
+inputs:
+  tag:
+    description: A CADCraft release tag (v0.20.1)
+    required: true
+  fonts:
+    description: Check out storytold/craft-fonts at the release's pin into ./craft-fonts
+    default: 'false'
+
+outputs:
+  version:
+    description: CADCraft's version (0.20.1)
+    value: ${{ steps.meta.outputs.version }}
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/checkout@v4
+      with:
+        repository: storytold/cadcraft
+        ref: ${{ inputs.tag }}
+        path: src
+        persist-credentials: false
+
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+
+    - name: Make it CAD Studio
+      shell: bash
+      run: python3 recipe/xpress/transform.py src
+
+    - name: Build variables
+      id: meta
+      shell: bash
+      run: |
+        version=$(awk '/^\[/{p=($0=="[workspace.package]");next} p&&$1=="version"{gsub(/[" ]/,"",$3);print $3;exit}' src/Cargo.toml)
+        fonts=$(grep -m1 -oE 'craft-fonts-ref: *[0-9a-f]{40}' src/.github/workflows/release.yml | grep -oE '[0-9a-f]{40}' || true)
+        [ -n "$version" ] || { echo "::error::no [workspace.package] version in src/Cargo.toml"; exit 1; }
+        [ -n "$fonts" ] || { echo "::error::no craft-fonts-ref in src/.github/workflows/release.yml"; exit 1; }
+        echo "version=$version" >> "$GITHUB_OUTPUT"
+        echo "fonts=$fonts" >> "$GITHUB_OUTPUT"
+        {
+          echo "CADCRAFT_BUILD_SHA=$(git -C src rev-parse HEAD)"
+          echo "CADCRAFT_BUILD_DATE=$(date -u +%Y-%m-%d)"
+        } >> "$GITHUB_ENV"
+
+    - name: Check out craft-fonts
+      if: inputs.fonts == 'true'
+      uses: actions/checkout@v4
+      with:
+        repository: storytold/craft-fonts
+        ref: ${{ steps.meta.outputs.fonts }}
+        path: craft-fonts
+        persist-credentials: false

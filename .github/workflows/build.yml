@@ -1,0 +1,224 @@
+# CAD Studio from a CADCraft release: its source with xpress/transform.py applied, built for the web
+# (the zip Xpress Survey serves at /cadcraft/) and natively for the desktop app, and published as a
+# release of this repository tagged v<CADCraft version>-xs.<n>.
+#
+# By hand: Actions → Build CAD Studio → Run workflow, with a CADCraft tag. sync.yml calls it weekly
+# for a CADCraft release that has no CAD Studio build yet.
+name: Build CAD Studio
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'CADCraft release tag (v0.20.1)'
+        required: true
+      build:
+        description: 'Build number n in v0.20.1-xs.n (empty: the next one)'
+        default: ''
+      draft:
+        description: 'Publish as a draft release'
+        type: boolean
+        default: false
+  workflow_call:
+    inputs:
+      tag:
+        type: string
+        required: true
+      build:
+        type: string
+        default: ''
+      draft:
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-${{ inputs.tag }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+  # Faster code than CADCraft's own release profile (thin LTO, 16 codegen units), at the cost of a
+  # longer build. panic stays "unwind": CADCraft's catch_unwind guards depend on it.
+  CARGO_PROFILE_RELEASE_LTO: fat
+  CARGO_PROFILE_RELEASE_CODEGEN_UNITS: 1
+  TRUNK_VERSION: 0.21.14
+
+jobs:
+  meta:
+    runs-on: ubuntu-latest
+    outputs:
+      release: ${{ steps.n.outputs.release }}
+    steps:
+      - name: Release tag
+        id: n
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+          BUILD: ${{ inputs.build }}
+        run: |
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::'$TAG' is not a CADCraft release tag like v0.20.1"; exit 1; }
+          gh api "repos/storytold/cadcraft/git/ref/tags/$TAG" > /dev/null || { echo "::error::storytold/cadcraft has no tag $TAG"; exit 1; }
+          if [ -z "$BUILD" ]; then
+            last=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 200 --json tagName --jq '.[].tagName' \
+              | sed -n "s/^${TAG//./\\.}-xs\.\([0-9]\+\)$/\1/p" | sort -n | tail -1)
+            BUILD=$(( ${last:-0} + 1 ))
+          fi
+          release="$TAG-xs.$BUILD"
+          if gh release view "$release" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            echo "::error::$release is already released"; exit 1
+          fi
+          echo "release=$release" >> "$GITHUB_OUTPUT"
+          echo "Building $release" >> "$GITHUB_STEP_SUMMARY"
+
+  web:
+    needs: meta
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: recipe
+      - id: src
+        uses: ./recipe/.github/actions/source
+        with:
+          tag: ${{ inputs.tag }}
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src
+          key: web
+      - name: Install trunk
+        run: |
+          curl -fsSL "https://github.com/trunk-rs/trunk/releases/download/v$TRUNK_VERSION/trunk-x86_64-unknown-linux-gnu.tar.gz" | tar -xz -C /usr/local/bin trunk
+          trunk --version
+      - name: Build and zip
+        working-directory: src
+        run: packaging/web/package.sh
+      - name: Check the name
+        run: |
+          zip=src/dist/release/cadcraft-web-${{ steps.src.outputs.version }}.zip
+          unzip -p "$zip" '*/index.html' | grep -q '<title>CAD Studio</title>' || { echo "::error::the web build's title is not CAD Studio"; exit 1; }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web
+          path: src/dist/release/cadcraft-web-*.zip
+          if-no-files-found: error
+
+  native:
+    needs: meta
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Ubuntu 22.04: glibc 2.35, so the binary runs on most current distributions.
+          - { os: linux, target: x86_64-unknown-linux-gnu, runner: ubuntu-22.04, cpu: x86-64-v2 }
+          - { os: linux, target: aarch64-unknown-linux-gnu, runner: ubuntu-22.04-arm }
+          - { os: windows, target: x86_64-pc-windows-msvc, runner: windows-latest, cpu: x86-64-v2 }
+          - { os: windows, target: aarch64-pc-windows-msvc, runner: windows-11-arm }
+          - { os: macos, target: universal-apple-darwin, runner: macos-latest }
+    runs-on: ${{ matrix.runner }}
+    defaults:
+      run:
+        shell: bash
+    env:
+      CRAFT_FONTS_REQUIRED: '1'
+      MACOSX_DEPLOYMENT_TARGET: '11.0'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: recipe
+      - id: src
+        uses: ./recipe/.github/actions/source
+        with:
+          tag: ${{ inputs.tag }}
+          fonts: 'true'
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.os == 'macos' && 'aarch64-apple-darwin,x86_64-apple-darwin' || matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src
+          key: native-${{ matrix.target }}
+      - name: Linux libraries
+        if: matrix.os == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends pkg-config libxkbcommon-dev libwayland-dev libx11-dev \
+            libxrandr-dev libxi-dev libgl1-mesa-dev libasound2-dev libudev-dev
+      - name: Build
+        working-directory: src
+        run: |
+          export CRAFT_FONTS_DIR="$GITHUB_WORKSPACE/craft-fonts"
+          # Flags go to the target only (CARGO_TARGET_<TRIPLE>_RUSTFLAGS), not to build scripts.
+          flags() { echo "CARGO_TARGET_$(echo "$1" | tr 'a-z-' 'A-Z_')_RUSTFLAGS"; }
+          build() {
+            local t=$1 f=""
+            case "$t" in x86_64-*) f="-C target-cpu=x86-64-v2" ;; esac
+            case "$t" in *-windows-msvc) f="$f -C target-feature=+crt-static" ;; esac
+            env "$(flags "$t")=$f" cargo build --release --locked -p cadcraft --target "$t"
+          }
+          if [ "${{ matrix.os }}" = windows ]; then export CADCRAFT_REQUIRE_WINRES=1; fi
+          mkdir -p ../out
+          if [ "${{ matrix.os }}" = macos ]; then
+            build aarch64-apple-darwin
+            build x86_64-apple-darwin
+            lipo -create -output ../out/cadcraft target/aarch64-apple-darwin/release/cadcraft target/x86_64-apple-darwin/release/cadcraft
+            lipo -info ../out/cadcraft
+          elif [ "${{ matrix.os }}" = windows ]; then
+            build "${{ matrix.target }}"
+            cp "target/${{ matrix.target }}/release/cadcraft.exe" ../out/
+          else
+            build "${{ matrix.target }}"
+            cp "target/${{ matrix.target }}/release/cadcraft" ../out/
+          fi
+      - name: Package
+        run: |
+          name="cad-studio-${{ steps.src.outputs.version }}-${{ matrix.target }}"
+          mkdir -p "pkg/$name"
+          cp out/* "pkg/$name/"
+          for f in LICENSE-MIT LICENSE-APACHE NOTICE ATTRIBUTION.md XPRESS-MODIFICATIONS.txt; do cp "src/$f" "pkg/$name/"; done
+          # craft-fonts' licences for the fonts this build embeds, as CADCraft's packages carry them.
+          for f in craft-fonts/fonts/*/OFL.txt; do cp "$f" "pkg/$name/OFL-$(basename "$(dirname "$f")").txt"; done
+          cd pkg
+          if [ "${{ matrix.os }}" = windows ]; then 7z a -tzip -mx=9 "$name.zip" "$name" > /dev/null; else tar -czf "$name.tar.gz" "$name"; fi
+          ls -l
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-${{ matrix.target }}
+          path: pkg/cad-studio-*
+          if-no-files-found: error
+
+  release:
+    needs: [meta, web, native]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: assets
+          merge-multiple: true
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE: ${{ needs.meta.outputs.release }}
+          TAG: ${{ inputs.tag }}
+          DRAFT: ${{ inputs.draft && '--draft' || '' }}
+        run: |
+          cd assets
+          find . -mindepth 1 -type d -exec rm -rf {} +
+          sha256sum -- * > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+          cat > ../notes.md <<EOF
+          CAD Studio for Xpress Survey: [CADCraft $TAG](https://github.com/storytold/cadcraft/releases/tag/$TAG) with Xpress Survey's colours and the name "CAD Studio", built by [xpress/transform.py](https://github.com/$GITHUB_REPOSITORY/blob/$GITHUB_SHA/xpress/transform.py) at ${GITHUB_SHA:0:7}.
+
+          - \`cadcraft-web-*.zip\`: the browser build, for Xpress Survey's \`/cadcraft/\`.
+          - \`cad-studio-*\`: the desktop program for Linux, Windows and macOS (universal). Not signed.
+
+          MIT OR Apache-2.0, as CADCraft. Not affiliated with Autodesk, Inc.
+          EOF
+          gh release create "$RELEASE" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --title "CAD Studio $RELEASE" --notes-file ../notes.md $DRAFT -- *

@@ -1,0 +1,122 @@
+# CADCraft → CAD Studio, in what the app shows: Rust string literals (labels, titles, messages and
+# the tests that check them) and the interface catalogs' entries. Comments, provenance notes and
+# identifiers keep CADCraft's name: they describe the code, and the code is CADCraft's.
+
+from = "CADCraft"
+to = "CAD Studio"
+
+# Searched for .rs files (string literals only) and .tsv catalogs (entry lines only, not # notes).
+roots = ["crates", "apps"]
+
+# Names stored in drawings, settings and other programs' views of the app: renaming them would make
+# CAD Studio's drawings and settings differ from CADCraft's, so they stay. Matched case-sensitively;
+# CADCRAFT_* environment variables are upper case and never match `from`.
+protect = [
+  "CADCraft Stroke",        # the built-in drafting font, written into a drawing's text styles
+  "CADCraft Static Test",   # a test font face
+  "CADCraft PDF",           # built-in plotters, named in a drawing's page setups
+  "CADCraft PNG",
+  "CADCraft SVG",
+  "CADCraft MCP",           # the MCP server, which keeps its name
+  "Based on CADCraft",      # our credit in About (about.patch below)
+  "CADCraft contributors",
+]
+
+# Files left as they are, as globs relative to the source root.
+exclude = [
+  "crates/engine/src/settings_dir.rs",   # settings folders on disk
+  "crates/mcp/**",                       # the MCP server talks about the app it drives
+  "crates/fonts/**",                     # font names
+  "crates/io/src/roundtrip.rs",          # round-trip reports for CADCraft's own corpus
+  "crates/io/src/roundtrip/**",
+  "apps/cadcraft/src/logging.rs",        # log file names
+  "apps/cadcraft-cli/**",                # the command-line tool, not shipped
+  "xtask/**",
+]
+
+# Other files, replaced as plain text: [file, old, new], each `old` found exactly once.
+[[text]]
+file = "apps/cadcraft-web/index.html"
+old = "<title>CADCraft</title>"
+new = "<title>CAD Studio</title>"
+
+[[text]]
+file = "apps/cadcraft-web/index.html"
+old = "Loading CADCraft&hellip;"
+new = "Loading CAD Studio&hellip;"
+
+# Windows file properties; LegalCopyright keeps CADCraft's copyright line as it is.
+[[text]]
+file = "apps/cadcraft/build.rs"
+old = 'res.set("ProductName", "CADCraft")'
+new = 'res.set("ProductName", "CAD Studio")'
+
+[[text]]
+file = "apps/cadcraft/build.rs"
+old = '.set("FileDescription", "CADCraft computer-aided design")'
+new = '.set("FileDescription", "CAD Studio computer-aided design")'
+
+# Updates come with Xpress Survey, not from CADCraft's releases: the startup check is never turned
+# on, Help ▸ Check for Updates… is taken off the menu and the check does nothing if asked for.
+[[text]]
+file = "crates/ui-egui/src/updates_ui.rs"
+old = "self.updates_rt.enabled = true;"
+new = "self.updates_rt.enabled = false; // CAD Studio: updates come with Xpress Survey"
+
+[[text]]
+file = "crates/ui-egui/src/updates_ui.rs"
+old = "app.updates_rt.check_requested = true;"
+new = "app.updates_rt.check_requested = false; // CAD Studio: updates come with Xpress Survey"
+
+[[text]]
+file = "crates/ui-egui/src/menus.rs"
+old = '("ui.updates.check", "Check for Updates…", &["Help", "Check for Updates…"], None)'
+new = '("ui.updates.check", "Check for Updates…", &[], None)'
+
+# About: CAD Studio's name and links, crediting CADCraft. The block from `old_start` through the line
+# holding `old_end` is replaced by `new`, indented as `old_start` was.
+[about]
+file = "crates/ui-egui/src/dialogs.rs"
+old_start = 'ui.heading(crate::tl!("CADCraft"));'
+old_end = "Not affiliated with Autodesk, Inc."
+new = '''
+ui.heading(crate::tl!("CAD Studio"));
+ui.label(crate::tf!("Version {version}", version = env!("CARGO_PKG_VERSION")));
+ui.label(crate::tl!("Computer-aided design and drafting for Xpress Survey."));
+ui.hyperlink_to("xpresssurveygh.com", "https://xpresssurveygh.com");
+ui.add_space(6.0);
+ui.label(RichText::new(crate::tl!("Based on CADCraft, by the ArtCraft team and the CADCraft contributors.")).color(t.text_dim));
+ui.hyperlink_to("github.com/storytold/cadcraft", "https://github.com/storytold/cadcraft");
+ui.hyperlink_to(crate::tl!("This build's source"), "https://github.com/gameticharles/cadcraft");
+ui.add_space(6.0);
+ui.label(RichText::new(crate::tl!("MIT OR Apache-2.0. Not affiliated with Autodesk, Inc.")).small().color(t.text_faint));
+'''
+
+# Sites that must show the new name once the transform has run; each must be found in its file.
+[[expect]]
+file = "crates/ui-egui/src/chrome.rs"
+text = 'crate::tl!("CAD Studio")'
+
+[[expect]]
+file = "crates/ui-egui/src/chrome.rs"
+text = '"CAD Studio      {}'
+
+[[expect]]
+file = "crates/ui-egui/src/menus.rs"
+text = '"About CAD Studio"'
+
+[[expect]]
+file = "crates/ui-egui/src/menus.rs"
+text = '"CAD Studio Help"'
+
+[[expect]]
+file = "crates/ui-egui/src/dialogs.rs"
+text = 'crate::tl!("About CAD Studio")'
+
+[[expect]]
+file = "apps/cadcraft/src/main.rs"
+text = '.with_title("CAD Studio")'
+
+[[expect]]
+file = "apps/cadcraft-web/src/main.rs"
+text = "CAD Studio"

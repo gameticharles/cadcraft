@@ -1,0 +1,40 @@
+# Each Monday, or by hand: when CADCraft's latest release has no CAD Studio build yet, build it
+# (build.yml). Xpress Survey's own weekly workflow then offers the new build in a pull request.
+#
+# A build stops when xpress/transform.py can't place a rule on the new release; the run's log
+# lists what moved, and brand.toml or rename.toml is updated by hand.
+name: Follow CADCraft
+
+on:
+  schedule:
+    - cron: '0 3 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.latest.outputs.tag }}
+    steps:
+      - name: Latest CADCraft release without a CAD Studio build
+        id: latest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag=$(gh release view --repo storytold/cadcraft --json tagName --jq .tagName)
+          echo "CADCraft's latest release: $tag" >> "$GITHUB_STEP_SUMMARY"
+          if gh release list --repo "$GITHUB_REPOSITORY" --limit 200 --json tagName --jq '.[].tagName' | grep -qx -- "$tag-xs\.[0-9]*"; then
+            echo "CAD Studio already has a build of it." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          fi
+
+  build:
+    needs: check
+    if: needs.check.outputs.tag != ''
+    uses: ./.github/workflows/build.yml
+    with:
+      tag: ${{ needs.check.outputs.tag }}

@@ -1,0 +1,82 @@
+# Xpress Survey's colours for CAD Studio, set in CADCraft's source before it is built.
+#
+# The same colours Xpress Survey used to patch into the stock web build (cadcraft/branding.json in
+# Xpress Survey): deep green surfaces, an emerald accent and amber points and warnings, on the dark
+# theme; the light theme keeps CADCraft's greys and takes the emerald accent.
+#
+# transform.py fails when a field, a literal or an anchor below is not found exactly once, so a
+# CADCraft release that moved or renamed something stops the build instead of shipping half-branded.
+
+theme_file = "crates/ui-egui/src/theme.rs"
+
+# Fields of `pub const DARK: Tokens = Tokens { ... }`. A value is the Rust expression the field takes.
+[tokens.DARK]
+chrome = "Color32::from_rgb(0x0d, 0x19, 0x16)"
+chrome_dark = "Color32::from_rgb(0x13, 0x22, 0x1e)"
+panel = "Color32::from_rgb(0x1f, 0x32, 0x2d)"
+tab_active = "Color32::from_rgb(0x13, 0x22, 0x1e)"
+control = "Color32::from_rgb(0x13, 0x22, 0x1e)"
+control_hover = "Color32::from_rgb(0x1a, 0x2c, 0x27)"
+border = "Color32::from_rgb(0x0d, 0x19, 0x16)"
+canvas = "Color32::from_rgb(0x0d, 0x19, 0x16)"
+grid_minor = "Color32::from_rgb(0x07, 0x10, 0x0e)"
+grid_major = "Color32::from_rgb(0x1f, 0x32, 0x2d)"
+icon_accent = "Color32::from_rgb(0x10, 0xb9, 0x81)"
+icon_point = "Color32::from_rgb(0xf5, 0x9e, 0x0b)"
+accent = "Color32::from_rgb(0x05, 0x96, 0x69)"
+selection = "Color32::from_rgb(0x34, 0xd3, 0x99)"
+hover = "Color32::from_rgb(0x6e, 0xe7, 0xb7)"
+grip = "Color32::from_rgb(0x04, 0x78, 0x57)"
+compare_area = "Color32::from_rgb(0xf5, 0x9e, 0x0b)"
+window_stroke = "Color32::from_rgb(0x10, 0xb9, 0x81)"
+cmd_bg = "Color32::from_rgba_premultiplied(0x0d, 0x19, 0x16, 0xf0)"
+toggle_on = "Color32::from_rgb(0x05, 0x96, 0x69)"
+field = "Color32::from_rgb(0x13, 0x22, 0x1e)"
+select_bg = "Color32::from_rgb(0x05, 0x96, 0x69)"
+cmd_history = "Color32::from_rgba_unmultiplied_const(0x0a, 0x18, 0x15, 170)"
+cmd_border = "Color32::from_rgb(0x2c, 0x44, 0x3d)"
+cmd_keyword = "Color32::from_rgb(0x6e, 0xe7, 0xb7)"
+cmd_keyword_hover = "Color32::from_rgb(0x06, 0x4e, 0x3b)"
+list_bg = "Color32::from_rgb(0x0d, 0x19, 0x16)"
+list_row = "Color32::from_rgb(0x13, 0x22, 0x1e)"
+warn = "Color32::from_rgb(0xfb, 0xbf, 0x24)"
+
+# Fields of `pub const LIGHT: Tokens = Tokens { ... }`. The light theme takes the drawing-area
+# colours (canvas, grid, selection, grips) from DARK, as CADCraft's does.
+[tokens.LIGHT]
+icon_accent = "Color32::from_rgb(0x05, 0x96, 0x69)"
+icon_point = "Color32::from_rgb(0xd9, 0x77, 0x06)"
+accent = "Color32::from_rgb(0x04, 0x78, 0x57)"
+toggle_on = "Color32::from_rgb(0x04, 0x78, 0x57)"
+
+# Colours written as literals where they are painted, not taken from the tokens.
+[[literal]]
+file = "crates/ui-egui/src/parametric.rs"
+old = "paint_glyph(painter, cr.shrink(2.0), kind, Color32::from_rgb(0x26, 0x2b, 0x33))"
+new = "paint_glyph(painter, cr.shrink(2.0), kind, Color32::from_rgb(0x07, 0x10, 0x0e))"
+
+[[literal]]
+file = "crates/ui-egui/src/viewcube.rs"
+old = "if part == Some(Part::Ring) { Color32::from_rgb(0x5c, 0x67, 0x7c) } else { Color32::from_rgb(0x48, 0x50, 0x5c) }"
+new = "if part == Some(Part::Ring) { Color32::from_rgb(0x1a, 0x2c, 0x27) } else { Color32::from_rgb(0x13, 0x22, 0x1e) }"
+
+[[literal]]
+file = "crates/ui-egui/src/viewcube.rs"
+old = 'crate::tl!("TOP"), egui::FontId::proportional(13.0), Color32::from_rgb(0x50, 0x54, 0x5a)'
+new = 'crate::tl!("TOP"), egui::FontId::proportional(13.0), Color32::from_rgb(0x1f, 0x32, 0x2d)'
+
+# egui's own widgets on the dark theme: set after CADCraft's `fn visuals` has set them from the tokens,
+# just before it returns. Each line is one Rust statement on `v` (egui::Visuals).
+[visuals.Dark]
+statements = [
+  "v.extreme_bg_color = Color32::from_rgb(0x07, 0x10, 0x0e);",
+  "v.widgets.inactive.bg_fill = Color32::from_rgb(0x1a, 0x2c, 0x27);",
+  "v.widgets.inactive.weak_bg_fill = Color32::from_rgb(0x1a, 0x2c, 0x27);",
+  "v.widgets.hovered.bg_fill = Color32::from_rgb(0x1a, 0x2c, 0x27);",
+  "v.widgets.hovered.weak_bg_fill = Color32::from_rgb(0x1a, 0x2c, 0x27);",
+  "v.window_stroke.color = Color32::from_rgb(0x1f, 0x32, 0x2d);",
+  "v.widgets.active.bg_fill = Color32::from_rgb(0x10, 0xb9, 0x81);",
+  "v.widgets.active.weak_bg_fill = Color32::from_rgb(0x10, 0xb9, 0x81);",
+  "v.widgets.open.weak_bg_fill = Color32::from_rgb(0x13, 0x22, 0x1e);",
+  "v.warn_fg_color = Color32::from_rgb(0xf5, 0x9e, 0x0b);",
+]
