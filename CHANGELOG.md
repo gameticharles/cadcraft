@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- The web zip carries `XPRESS-MODIFICATIONS.txt` too (from the next build; `v0.20.1-xs.1` has it only in the desktop archives).
+
 ## xs.1 (2026-11-13)
 
 - The recipe: `xpress/transform.py` with `brand.toml` (Xpress Survey's colours, set in CADCraft's

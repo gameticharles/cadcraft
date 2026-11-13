@@ -98,7 +98,12 @@ jobs:
           trunk --version
       - name: Build and zip
         working-directory: src
-        run: packaging/web/package.sh
+        run: |
+          packaging/web/package.sh
+          # The list of source files the transform changed goes in the zip too.
+          name=cadcraft-web-${{ steps.src.outputs.version }}
+          mkdir -p "$RUNNER_TEMP/$name" && cp XPRESS-MODIFICATIONS.txt "$RUNNER_TEMP/$name/"
+          (cd "$RUNNER_TEMP" && zip -q9 "$GITHUB_WORKSPACE/src/dist/release/$name.zip" "$name/XPRESS-MODIFICATIONS.txt")
       - name: Check the name
         run: |
           zip=src/dist/release/cadcraft-web-${{ steps.src.outputs.version }}.zip
