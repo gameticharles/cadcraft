@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Make CAD Studio from a CADCraft source tree: Xpress Survey's colours (brand.toml), name (rename.toml) and fonts (fonts.toml).
+"""Make CAD Studio from a CADCraft source tree: Xpress Survey's colours (brand.toml), name (rename.toml), fonts (fonts.toml) and Xpress Survey's jobs (jobs.toml).
 
     python3 xpress/transform.py SRC [--recipe DIR] [--check]
 
@@ -259,8 +259,9 @@ def main() -> int:
     tree, fail = Tree(a.src), Failures()
     brand(tree, tomllib.loads((a.recipe / "brand.toml").read_text(encoding="utf-8")), fail)
     names = rename(tree, tomllib.loads((a.recipe / "rename.toml").read_text(encoding="utf-8")), fail)
-    for t in tomllib.loads((a.recipe / "fonts.toml").read_text(encoding="utf-8")).get("text", []):
-        replace_once(tree, fail, t["file"], t["old"], t["new"], "fonts")
+    for part in ("fonts", "jobs"):
+        for t in tomllib.loads((a.recipe / f"{part}.toml").read_text(encoding="utf-8")).get("text", []):
+            replace_once(tree, fail, t["file"], t["old"], t["new"], part)
 
     changed = tree.changed()
     print(f"{len(changed)} files changed, {names} names in strings and catalogs")
@@ -278,7 +279,8 @@ def main() -> int:
         "CAD Studio is CADCraft (https://github.com/storytold/cadcraft) with these files changed by\n"
         "xpress/transform.py (https://github.com/gameticharles/cadcraft, branch xpress): Xpress Survey's\n"
         'colours, the name "CAD Studio" in what the app shows, updates left to Xpress Survey, and fonts\n'
-        "supplied by Xpress Survey (TrueType/OpenType files in the web build, CADCRAFT_BUNDLED_FONTS on the desktop).\n\n"
+        "supplied by Xpress Survey (TrueType/OpenType files in the web build, CADCRAFT_BUNDLED_FONTS on the desktop),\n"
+        "and SAVEJOB and xpress.state for Xpress Survey's jobs.\n\n"
         + "".join(f"{rel}\n" for rel in changed),
         encoding="utf-8",
     )

@@ -1,0 +1,60 @@
+# Xpress Survey's jobs in CAD Studio. A job's drawing opens in CAD Studio from the job, and its page saves the
+# drawing's boundary back to the job (Save to job). Two commands for that page:
+#   - SAVEJOB, typed in CAD Studio: asks the page to save to the job (the page shows what changes first);
+#   - xpress.state: what the page reads every few seconds: how many SAVEJOBs there have been, and a mark of the
+#     active drawing that changes with each edit, undo and redo (for the page's running summary of the changes).
+# The page reads them through the web build's window.cadcraft.execute, and on the desktop through the control
+# channel (engine.execute), which has no way to tell the page of anything by itself.
+#
+# Each rule replaces `old` (found exactly once) by `new`, as rename.toml's [[text]] rules do.
+
+[[text]]
+file = "crates/engine/src/cmd/file.rs"
+old = """
+        CommandSpec::new("document.bytes", "Drawing as bytes", run_bytes)"""
+new = """
+        // CAD Studio: Xpress Survey's jobs (xpress/jobs.toml).
+        CommandSpec::new("savejob", "Save to Job", run_savejob)
+            .params("{} (asks Xpress Survey's page to save the drawing's boundary to the job it was opened from)")
+            .noundo(),
+        CommandSpec::new("xpress.state", "Xpress Survey State", run_xpress_state)
+            .params("{} → {savejob: SAVEJOBs so far, drawing: a mark of the active drawing that changes with each edit, or null}")
+            .enabled(always)
+            .noundo(),
+        CommandSpec::new("document.bytes", "Drawing as bytes", run_bytes)"""
+
+[[text]]
+file = "crates/engine/src/cmd/file.rs"
+old = """
+fn run_bytes(s: &mut Session, p: &Value) -> Result<Value> {"""
+new = """
+/// CAD Studio: SAVEJOBs so far, for Xpress Survey's page (`xpress.state`).
+static SAVEJOB: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// CAD Studio: SAVEJOB. The page that opened the drawing from a job sees it in `xpress.state` and shows what
+/// would change before it saves.
+fn run_savejob(s: &mut Session, _p: &Value) -> Result<Value> {
+    s.state()?;
+    let n = SAVEJOB.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
+    s.echo("Save to job: Xpress Survey shows what changes before it saves.");
+    Ok(json!({ "savejob": n }))
+}
+
+/// CAD Studio: what Xpress Survey's page reads every few seconds. The drawing's mark is its id, the drawing itself
+/// (a new one with each change: drawings are copied on write) and its undo and redo depths.
+fn run_xpress_state(s: &mut Session, _p: &Value) -> Result<Value> {
+    let drawing = s
+        .state()
+        .ok()
+        .map(|st| format!("{}:{:x}:{}:{}", st.uid, std::sync::Arc::as_ptr(&st.doc) as usize, st.undo.len(), st.redo.len()));
+    Ok(json!({ "savejob": SAVEJOB.load(std::sync::atomic::Ordering::Relaxed), "drawing": drawing }))
+}
+
+fn run_bytes(s: &mut Session, p: &Value) -> Result<Value> {"""
+
+# The two commands' names in Chinese, as every command's is (CADCraft's test of the Chinese catalog asks for it);
+# other languages show them in English.
+[[text]]
+file = "crates/ui-egui/src/i18n/zh.tsv"
+old = "\tDrawing as bytes\t字节形式的图形\n"
+new = "\tDrawing as bytes\t字节形式的图形\n\tSave to Job\t保存到作业\n\tXpress Survey State\tXpress Survey 状态\n"

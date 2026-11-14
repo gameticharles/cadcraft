@@ -1,5 +1,12 @@
 # Changelog
 
+## xs.4 (2026-11-14)
+
+- `jobs.toml` (applied by `transform.py` after `fonts.toml`): `SAVEJOB`, typed in CAD Studio, asks Xpress
+  Survey's page to save the drawing's boundary to the job it was opened from; `xpress.state` tells the page how
+  many SAVEJOBs there have been and gives a mark of the active drawing that changes with each edit, undo and
+  redo, for the page's running summary of what would change. Both names in the Chinese catalog.
+
 ## xs.3 (2026-11-14)
 
 - `fonts.toml`: the web build redraws with newly arrived fonts only when a drawing is open. Xpress
