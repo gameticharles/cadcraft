@@ -1,0 +1,83 @@
+# Fonts for CAD Studio. Xpress Survey's plans and its users' drawings name Windows fonts (times.ttf,
+# arial.ttf, "Calibri", "Times New Roman" …). CADCraft finds those only among the fonts installed on
+# the computer, and its web build has none at all, so their text fell back to the stroke font, wider
+# than the real fonts, and ran out of the plans' tables.
+#
+# Xpress Survey supplies metric-compatible stand-ins (Tinos for Times New Roman, Arimo for Arial,
+# Carlito for Calibri … all SIL OFL) under the Windows names:
+#   - web: the page sends them as files, the way SHX fonts picked with a drawing arrive;
+#   - desktop: a folder that comes with the app (CADCRAFT_BUNDLED_FONTS), read after every
+#     installed font, so a computer with the real fonts keeps them.
+#
+# Each rule replaces `old` (found exactly once) by `new`, as rename.toml's [[text]] rules do.
+
+# Web: the Open picker offers font files too, so a user can add a font a drawing needs.
+[[text]]
+file = "apps/cadcraft-web/src/upload.rs"
+old = 'const ACCEPT: &str = ".dxf,.dwg,.shx";'
+new = 'const ACCEPT: &str = ".dxf,.dwg,.shx,.ttf,.otf,.ttc,.otc"; // CAD Studio: TrueType and OpenType fonts too'
+
+# Web: fonts (SHX, and now TrueType/OpenType) are taken out of what arrived before the drawings.
+[[text]]
+file = "apps/cadcraft-web/src/upload.rs"
+old = ".partition(|u| u.as_ref().is_ok_and(|(n, _)| is_shx(n)));"
+new = ".partition(|u| u.as_ref().is_ok_and(|(n, _)| is_font(n)));"
+
+# Web: a TrueType/OpenType font is registered under its file name ("times.ttf", "Times New Roman.ttf"),
+# which is how text styles name it; one that isn't a font says so on the command line.
+[[text]]
+file = "apps/cadcraft-web/src/upload.rs"
+old = """
+        for (name, bytes) in fonts.into_iter().flatten() {
+            match cadcraft_fonts::shx::register(&name, &bytes) {"""
+new = """
+        for (name, bytes) in fonts.into_iter().flatten() {
+            // CAD Studio: TrueType and OpenType fonts (Xpress Survey's page sends its stand-ins for Windows fonts).
+            if !is_shx(&name) {
+                let bytes = std::sync::Arc::new(bytes);
+                if cadcraft_fonts::ttf::Face::new(bytes.clone(), 0).is_some() {
+                    cadcraft_fonts::ttf::register(&name, std::sync::Arc::unwrap_or_clone(bytes));
+                    registered = true;
+                } else {
+                    app.open_failed(format!("{name}: not a font CAD Studio can read"));
+                }
+                continue;
+            }
+            match cadcraft_fonts::shx::register(&name, &bytes) {"""
+
+[[text]]
+file = "apps/cadcraft-web/src/upload.rs"
+old = """
+/// Whether `name` is an SHX font or shape file.
+fn is_shx(name: &str) -> bool {"""
+new = """
+/// CAD Studio: whether `name` is a font file the web build registers (SHX, TrueType or OpenType).
+fn is_font(name: &str) -> bool {
+    let n = name.to_ascii_lowercase();
+    [".shx", ".ttf", ".otf", ".ttc", ".otc"].iter().any(|x| n.ends_with(x))
+}
+
+/// Whether `name` is an SHX font or shape file.
+fn is_shx(name: &str) -> bool {"""
+
+# Desktop: the fonts that come with CAD Studio, searched after the installed ones. The scan reads
+# the list from its end and keeps the first file found for a name, so they go first in the list.
+[[text]]
+file = "crates/fonts/src/ttf.rs"
+old = """
+    dirs
+}
+
+/// Every font file under [`system_font_dirs`], by lower-case file stem."""
+new = """
+    // CAD Studio: the fonts that come with it (CADCRAFT_BUNDLED_FONTS, set by Xpress Survey's desktop
+    // app), read after every installed font, so the real Times New Roman wins over its stand-in.
+    if let Some(v) = std::env::var_os("CADCRAFT_BUNDLED_FONTS") {
+        let mut bundled: Vec<PathBuf> = std::env::split_paths(&v).filter(|p| !p.as_os_str().is_empty()).collect();
+        bundled.append(&mut dirs);
+        dirs = bundled;
+    }
+    dirs
+}
+
+/// Every font file under [`system_font_dirs`], by lower-case file stem."""
