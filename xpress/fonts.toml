@@ -81,3 +81,15 @@ new = """
 }
 
 /// Every font file under [`system_font_dirs`], by lower-case file stem."""
+
+# Web: fonts are redrawn into the open drawings only when one is open. The page sends its fonts as CAD
+# Studio starts, before any drawing, and `regenall` then put "command `regenall` is not available right
+# now: no drawing open" on the command line. A drawing opened later is drawn with them anyway.
+[[text]]
+file = "apps/cadcraft-web/src/upload.rs"
+old = """
+        if registered {
+            let _ = app.run("regenall", serde_json::json!({}));"""
+new = """
+        if registered && app.session.state().is_ok() {
+            let _ = app.run("regenall", serde_json::json!({}));"""
