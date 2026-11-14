@@ -1,0 +1,174 @@
+# CAD Studio inside an Xpress Survey job's page (the Layers tab), asked for by `?embed` in the web build's URL. The
+# job's drawing is the job's: the page opens it, saves it to the job and gives the job's files, so CAD Studio here has
+# no menu bar, Tool Bar, file tabs or Start page, and the commands that would open, start, close or write other
+# files are not typed here:
+#   - SAVE, QSAVE (Ctrl+S) run SAVEJOB (jobs.toml): the page saves the drawing to the job;
+#   - NEW, OPEN, CLOSE, SAVEAS, EXPORT, PLOT, PUBLISH, WBLOCK and the like say they are not in the job's drawing.
+# The page itself still runs any command through window.cadcraft.execute (CadApp::run), which this does not touch.
+# Nothing here is saved: the panel layout chosen in the job's page is not kept, so CAD Studio on its own page opens
+# as the user left it there (menus and Tool Bar are never saved by the web build).
+#
+# The entities query also gives each entity's xdata, so the page can tell the job's points and lines (XPRESS ids)
+# from what was drawn by hand.
+#
+# Each rule replaces `old` (found exactly once) by `new`, as rename.toml's [[text]] rules do.
+
+# ------------------------------------------------------------------------------------------- the switch
+
+[[text]]
+file = "crates/ui-egui/src/lib.rs"
+old = """
+pub const PREFS_KEY: &str = "cadcraft.prefs";"""
+new = """
+pub const PREFS_KEY: &str = "cadcraft.prefs";
+
+/// CAD Studio: inside an Xpress Survey job's page (`?embed`, xpress/embed.toml).
+static EMBEDDED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// CAD Studio: set once as the web build starts, from `?embed`.
+pub fn set_embedded(on: bool) {
+    EMBEDDED.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// CAD Studio: whether this is inside an Xpress Survey job's page.
+pub fn embedded() -> bool {
+    EMBEDDED.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+/// CAD Studio: what a command typed (or chosen by its shortcut) is inside a job's page. `None`: it runs as anywhere.
+/// `Some(true)`: SAVE, which saves to the job (SAVEJOB). `Some(false)`: a command that opens, starts, closes or
+/// writes other files, which the job's page does instead.
+pub fn embedded_command(id: &str) -> Option<bool> {
+    match id {
+        "qsave" | "save" => Some(true),
+        "saveas" | "ui.saveas" | "saveall" | "new" | "qnew" | "ui.newtemplate" | "open" | "ui.open" | "recover" | "xopen" | "close" | "closeall"
+        | "document.switch" | "ui.sample" | "export" | "exportpdf" | "plot" | "publish" | "pdfbook" | "share" | "wblock" | "-wblock" | "quit"
+        | "exit" => Some(false),
+        _ => None,
+    }
+}"""
+
+[[text]]
+file = "crates/ui-egui/src/lib.rs"
+old = """
+    /// Start a command as if typed (interactive when it has prompts).
+    pub fn start(&mut self, name: &str) {
+        if menus::run_ui_command(self, name, &Value::Null).is_some() {"""
+new = """
+    /// CAD Studio: inside a job's page, a typed SAVE saves to the job and the commands for other files say they are not
+    /// here (xpress/embed.toml). True when `name` was one of those.
+    fn embedded_typed(&mut self, name: &str) -> bool {
+        if !embedded() {
+            return false;
+        }
+        let id = cadcraft_engine::cmd::resolve_alias(name.trim());
+        match embedded_command(&id) {
+            None => false,
+            Some(true) => {
+                if let Err(e) = self.session.execute("savejob", &Value::Null) {
+                    self.session.echo(e.to_string());
+                }
+                true
+            }
+            Some(false) => {
+                self.session.echo(format!(
+                    "{} is not in the job's drawing: SAVE saves it to the job, and the job's files come from Xpress Survey.",
+                    name.trim().to_ascii_uppercase()
+                ));
+                true
+            }
+        }
+    }
+
+    /// Start a command as if typed (interactive when it has prompts).
+    pub fn start(&mut self, name: &str) {
+        if self.embedded_typed(name) {
+            return;
+        }
+        if menus::run_ui_command(self, name, &Value::Null).is_some() {"""
+
+[[text]]
+file = "crates/ui-egui/src/lib.rs"
+old = """
+            let first = text.split_whitespace().next().unwrap_or("");
+            // `cmd {json}` is a programmatic call: the engine runs it with those parameters."""
+new = """
+            let first = text.split_whitespace().next().unwrap_or("");
+            if !first.is_empty() && self.embedded_typed(first) {
+                return None;
+            }
+            // `cmd {json}` is a programmatic call: the engine runs it with those parameters."""
+
+[[text]]
+file = "crates/ui-egui/src/lib.rs"
+old = """
+            } else {
+                chrome::start_page(self, ui);
+            }"""
+new = """
+            } else if embedded() {
+                // CAD Studio: the job's page sends its drawing; no Start page to choose another.
+                ui.centered_and_justified(|ui| ui.label(egui::RichText::new("Opening the job's drawing…").color(t.text_dim)));
+            } else {
+                chrome::start_page(self, ui);
+            }"""
+
+# ------------------------------------------------------------------------------------- the web build
+
+[[text]]
+file = "apps/cadcraft-web/src/main.rs"
+old = """
+                            log::warn!("panel layout was not restored: {error}");
+                        }"""
+new = """
+                            log::warn!("panel layout was not restored: {error}");
+                        }
+                        // CAD Studio: `?embed`, inside an Xpress Survey job's page (xpress/embed.toml).
+                        if crate::wants_embed(&query()) {
+                            cadcraft_ui_egui::set_embedded(true);
+                            app.ui.in_window_menu = false;
+                            app.ui.show_toolbar = false;
+                            app.ui.show_file_tabs = false;
+                        }"""
+
+[[text]]
+file = "apps/cadcraft-web/src/main.rs"
+old = """
+            match crate::panel_layout::save(&self.0.ui) {"""
+new = """
+            // CAD Studio: the job's page keeps no panel layout of its own (xpress/embed.toml).
+            if cadcraft_ui_egui::embedded() {
+                return;
+            }
+            match crate::panel_layout::save(&self.0.ui) {"""
+
+[[text]]
+file = "apps/cadcraft-web/src/main.rs"
+old = """
+/// True when the URL query (`?cpu&sample`) has a `cpu` flag: the CPU canvas path is requested."""
+new = """
+/// CAD Studio: true when the URL query has an `embed` flag: inside an Xpress Survey job's page (xpress/embed.toml).
+#[cfg(any(target_arch = "wasm32", test))]
+fn wants_embed(query: &str) -> bool {
+    query.trim_start_matches('?').split('&').any(|p| p == "embed" || p.starts_with("embed="))
+}
+
+/// True when the URL query (`?cpu&sample`) has a `cpu` flag: the CPU canvas path is requested."""
+
+# ---------------------------------------------------------------------------------- xdata in queries
+
+[[text]]
+file = "crates/engine/src/cmd/inquiry.rs"
+old = """
+fn entity_summary(e: &cadcraft_doc::Entity) -> Value {
+    json!({ "handle": e.handle.hex(), "type": e.kind.type_name(), "layer": e.common.layer, "color": e.common.color.name(), "transparency": super::props::transparency_value(e.common.transparency), "geometry": e.kind })
+}"""
+new = """
+fn entity_summary(e: &cadcraft_doc::Entity) -> Value {
+    let mut v = json!({ "handle": e.handle.hex(), "type": e.kind.type_name(), "layer": e.common.layer, "color": e.common.color.name(), "transparency": super::props::transparency_value(e.common.transparency), "geometry": e.kind });
+    // CAD Studio: the entity's xdata (DXF groups 1000–1071), so Xpress Survey's page finds its ids (xpress/embed.toml).
+    if !e.common.xdata.is_empty() {
+        v["xdata"] = json!(e.common.xdata);
+    }
+    v
+}"""

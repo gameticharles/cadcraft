@@ -1,0 +1,24 @@
+# CAD Studio on more devices. eframe asks the graphics device for 2D textures of 8192 pixels a side, and a device
+# that has less (some phones' browsers report 4096 for WebGL2) refuses it, so CAD Studio did not start there: "Limit
+# 'max_texture_dimension_2d' value 8192 is better than allowed 4096 … A browser with WebGPU or WebGL2 is required."
+# The web build asks for no more than the device has. The canvas and egui's textures stay within it (egui reads the
+# device's limit; images are tiled by it), so nothing else changes on a device that has 8192 or more.
+#
+# Each rule replaces `old` (found exactly once) by `new`, as rename.toml's [[text]] rules do.
+
+[[text]]
+file = "apps/cadcraft-web/src/main.rs"
+old = """
+            let mut options = eframe::WebOptions::default();"""
+new = """
+            let mut options = eframe::WebOptions::default();
+            // CAD Studio: no larger textures than the device has (xpress/devices.toml).
+            if let eframe::egui_wgpu::WgpuSetup::CreateNew(create) = &mut options.wgpu_options.wgpu_setup {
+                let ask = create.device_descriptor.clone();
+                create.device_descriptor = std::sync::Arc::new(move |adapter| {
+                    let mut descriptor = ask(adapter);
+                    let most = adapter.limits().max_texture_dimension_2d;
+                    descriptor.required_limits.max_texture_dimension_2d = descriptor.required_limits.max_texture_dimension_2d.min(most);
+                    descriptor
+                });
+            }"""

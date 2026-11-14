@@ -1,5 +1,17 @@
 # Changelog
 
+## xs.5 (2026-11-14)
+
+- `devices.toml`: the web build asks the graphics device for no larger textures than it has. eframe asked for
+  8192 pixels a side, and a device reporting 4096 for WebGL2 (some phones' browsers) refused it, so CAD Studio
+  didn't start there ("Limit 'max_texture_dimension_2d' value 8192 is better than allowed 4096").
+- `embed.toml` (not used by Xpress Survey yet): `?embed` in the web build's URL, for CAD Studio inside a job's
+  page: no menu bar, Tool Bar, file tabs or Start page, and its panel layout isn't saved. Typed SAVE and QSAVE
+  (Ctrl+S) run SAVEJOB; NEW, OPEN, CLOSE, SAVEAS, EXPORT, PLOT, PUBLISH, WBLOCK and the like say they aren't in
+  the job's drawing. The page's own calls (`window.cadcraft.execute`) are unchanged.
+- `embed.toml`: the `entities` and `drawing.inspect` queries give each entity's xdata (`xdata`: DXF groups), so
+  Xpress Survey's page finds the ids it wrote (`1001 XPRESS`).
+
 ## xs.4 (2026-11-14)
 
 - `jobs.toml` (applied by `transform.py` after `fonts.toml`): `SAVEJOB`, typed in CAD Studio, asks Xpress

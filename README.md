@@ -16,7 +16,11 @@ never needs a rebase. CADCraft's own branches are kept as forked and are not bui
 | --- | --- |
 | `xpress/brand.toml` | Theme token fields, painted colour literals and egui widget colours to set |
 | `xpress/rename.toml` | The name change: where it applies, the names kept (fonts, plotters), the About text |
-| `xpress/transform.py` | Applies both to a CADCraft checkout; fails when any rule finds nothing to change |
+| `xpress/fonts.toml` | Fonts supplied by Xpress Survey (web: font files it sends; desktop: `CADCRAFT_BUNDLED_FONTS`) |
+| `xpress/jobs.toml` | SAVEJOB and `xpress.state`, for drawings opened from Xpress Survey's jobs |
+| `xpress/embed.toml` | `?embed`: CAD Studio inside a job's page (no menus, SAVE to the job), and xdata in queries |
+| `xpress/devices.toml` | No larger textures than the device has, so phones that report less still start |
+| `xpress/transform.py` | Applies them all to a CADCraft checkout; fails when any rule finds nothing to change |
 | `.github/workflows/build.yml` | Builds the web zip and the desktop programs, and publishes a release |
 | `.github/workflows/sync.yml` | Each Monday, builds CADCraft's latest release if it has no CAD Studio build yet |
 
